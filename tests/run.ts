@@ -126,6 +126,15 @@ async function main() {
     stale = true;
   }
   check('a used 2FA code cannot be replayed', stale);
+  // Session resolution: the stored row is authoritative; the signed payload is the
+  // recovery path used by stateless/serverless deployments.
+  const liveToken = signed.token as string;
+  check('session resolves from the stored row', !!readSession(liveToken));
+  db.prepare(`DELETE FROM sessions WHERE user_id = (SELECT id FROM users WHERE email = ?)`).run(email);
+  check('session survives a lost row via the signed fallback', !!readSession(liveToken));
+  const tampered = `${liveToken.slice(0, -2)}zz`;
+  check('a tampered token is refused', readSession(tampered) === null);
+  check('a random token is refused', readSession('abc.def.ghi') === null);
   const reset = beginPasswordReset(email);
   completePasswordReset(email, reset.code, 'New-Password-42');
   check('password reset works and signs other devices out', (() => {

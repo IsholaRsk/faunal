@@ -211,14 +211,89 @@ export function updatePassword(userId: string, newPassword: string) {
   getDb().prepare(`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`).run(hashPassword(newPassword), nowIso(), userId);
 }
 
+/**
+ * Sessions are stored as a hash of the token (the server never keeps a usable
+ * credential). Because the demo runs on an ephemeral serverless filesystem —
+ * where a cold start may not have the row that was written minutes earlier on
+ * another instance — the token also carries an HMAC-signed fallback payload.
+ * It proves only "this user asked to be signed in, until <exp>"; every role,
+ * status and permission is still read from the database on each request.
+ * Set FAUNAL_SESSION_SECRET in any real deployment.
+ */
+const SESSION_SECRET = process.env.FAUNAL_SESSION_SECRET ?? 'faunal-development-only-secret';
+const STATELESS_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+
+function signStateless(userId: string, expiresAt: number): string {
+  const body = Buffer.from(JSON.stringify({ u: userId, e: expiresAt })).toString('base64url');
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function readStateless(token: string): { userId: string; expiresAt: number } | null {
+  // Token shape is `<random>.<body>.<signature>`; the random half is what the
+  // database hashes, the last two segments carry the signed fallback payload.
+  const segs = token.split('.');
+  const sig = segs.pop();
+  const body = segs.pop();
+  if (!body || !sig) return null;
+  const expect = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64url');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expect);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as { u: string; e: number };
+    if (!parsed.u || !parsed.e || parsed.e < Date.now()) return null;
+    return { userId: parsed.u, expiresAt: parsed.e };
+  } catch {
+    return null;
+  }
+}
+
 export function createSession(userId: string, userAgent: string): string {
-  const token = crypto.randomBytes(32).toString('base64url');
+  const rand = crypto.randomBytes(32).toString('base64url');
+  const expiresMs = Date.now() + STATELESS_TTL_MS;
+  const token = `${rand}.${signStateless(userId, expiresMs)}`;
   const db = getDb();
   db.prepare(
     `INSERT INTO sessions (id,user_id,token_hash,expires_at,created_at,user_agent,ip)
      VALUES (?,?,?,?,?,?,NULL)`,
-  ).run(id('ses'), userId, hashToken(token), new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(), nowIso(), userAgent.slice(0, 200));
+  ).run(id('ses'), userId, hashToken(token), new Date(expiresMs).toISOString(), nowIso(), userAgent.slice(0, 200));
   return token;
+}
+
+/** Row → the session shape every surface consumes. */
+function userView(row: Record<string, string | number | null>): SessionUser {
+  const text = (value: unknown): string | null => (value === undefined || value === null ? null : String(value));
+  return {
+    id: String(row.id),
+    email: String(row.email),
+    role: row.role as Role,
+    firstName: String(row.first_name ?? ''),
+    lastName: String(row.last_name ?? ''),
+    currency: text(row.currency) ?? 'USD',
+    locale: text(row.locale) ?? 'en',
+    jurisdictionCode: text(row.jurisdiction_code),
+    avatarPath: text(row.avatar_path),
+    breederId: text(row.breeder_id),
+    breederTier: text(row.breeder_tier),
+  };
+}
+
+/** Signed-cookie recovery when the sessions row is not on this instance. */
+function readStatelessFallback(token: string): SessionUser | null {
+  const stateless = readStateless(token);
+  if (!stateless) return null;
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT u.id,u.email,u.role,u.first_name,u.last_name,u.currency,u.locale,u.jurisdiction_code,u.avatar_path,u.status,
+              b.id AS breeder_id, b.tier AS breeder_tier
+       FROM users u LEFT JOIN breeders b ON b.user_id = u.id WHERE u.id = ?`,
+    )
+    .get(stateless.userId) as Record<string, string | number | null> | undefined;
+  if (!row) return null;
+  if (row.status && row.status !== 'ACTIVE') return null;
+  return userView(row);
 }
 
 export function destroySession(token: string) {
@@ -238,7 +313,7 @@ export function readSession(token: string | undefined | null): SessionUser | nul
        WHERE s.token_hash = ?`,
     )
     .get(hashToken(token)) as Record<string, string | null> | undefined;
-  if (!row) return null;
+  if (!row) return readStatelessFallback(token);
   if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
     db.prepare(`DELETE FROM sessions WHERE token_hash = ?`).run(hashToken(token));
     return null;

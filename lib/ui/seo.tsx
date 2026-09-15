@@ -1,7 +1,19 @@
+/**
+ * Canonical origin for metadata, sitemap and robots. Explicit env wins; then the
+ * Vercel-injected production URL (so a deploy never advertises localhost).
+ */
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000');
+
 export const SITE = {
   name: 'FAUNAL',
   legalName: 'FAUNAL Marketplace, Inc.',
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
+  url: SITE_URL,
   tagline: 'Exotic animals. Legally.',
   description:
     'FAUNAL is a New York–built U.S. marketplace where licensed, document-verified breeders sell legally permitted exotic animals — reptiles, birds, amphibians, fish and invertebrates — with state-by-state compliance built into every listing.',

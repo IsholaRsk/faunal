@@ -2,7 +2,7 @@
   "name": "faunal-marketplace",
   "version": "0.1.0",
   "private": true,
-  "description": "FAUNAL — premium US marketplace for legally permitted exotic animals. One backend, two experiences (mobile app + desktop marketplace).",
+  "description": "FAUNAL \u2014 premium US marketplace for legally permitted exotic animals. One backend, two experiences (mobile app + desktop marketplace).",
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
@@ -30,5 +30,8 @@
     "tailwindcss": "3.4.17",
     "tsx": "4.20.3",
     "typescript": "5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
