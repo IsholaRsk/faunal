@@ -68,22 +68,60 @@ function migrate(db: Handle) {
   }
 }
 
+/**
+ * Copy the bundled database into the writable directory. Serverless instances
+ * handle concurrent requests, so the copy is written to a private temp file and
+ * moved into place with rename(2) — atomic on the same filesystem. A reader
+ * therefore never observes a half-written database.
+ */
 function copySeed() {
   if (!SEED_PATH || fs.existsSync(DB_PATH)) return;
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  fs.copyFileSync(SEED_PATH, DB_PATH);
-  // A seeded file may carry its own sidecars; drop them so SQLite rebuilds clean.
+  // Stale sidecars from a previous cold start would shadow a fresh copy.
   for (const suffix of ['-wal', '-shm']) {
-    const target = `${SEED_PATH}${suffix}`;
-    if (fs.existsSync(target)) fs.rmSync(target);
+    const side = `${DB_PATH}${suffix}`;
+    if (fs.existsSync(side)) fs.rmSync(side, { force: true });
+  }
+  const tmp = `${DB_PATH}.${process.pid}.${Date.now()}.tmp`;
+  fs.copyFileSync(SEED_PATH, tmp);
+  try {
+    fs.renameSync(tmp, DB_PATH);
+  } catch {
+    fs.rmSync(tmp, { force: true });
+    if (!fs.existsSync(DB_PATH)) fs.copyFileSync(SEED_PATH, DB_PATH);
+  }
+}
+
+function open(): Handle {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  return new Database(DB_PATH, { fileMustExist: false });
+}
+
+/**
+ * Open the working database. A copy made by a sibling instance can be swapped in
+ * between our existence check and the open, which SQLite reports as a malformed
+ * or empty file — so the handle is probed and, on failure, rebuilt from the
+ * pristine bundle before the first request is served.
+ */
+function openChecked(): Handle {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  try {
+    const db = new Database(DB_PATH, { fileMustExist: false });
+    db.prepare(`SELECT COUNT(*) AS n FROM users`).get();
+    return db;
+  } catch (e) {
+    console.warn('[db] re-seeding the working copy after a failed open:', (e as Error).message);
+    fs.rmSync(DB_PATH, { force: true });
+    for (const suffix of ['-wal', '-shm']) fs.rmSync(`${DB_PATH}${suffix}`, { force: true });
+    copySeed();
+    return new Database(DB_PATH, { fileMustExist: false });
   }
 }
 
 export function getDb(): Handle {
   if (globalThis.__faunalDb) return globalThis.__faunalDb;
   copySeed();
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const db = new Database(DB_PATH, { fileMustExist: false });
+  const db = openChecked();
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('busy_timeout = 5000');

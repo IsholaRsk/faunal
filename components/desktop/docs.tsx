@@ -3,12 +3,18 @@
 import Link from 'next/link';
 import { Icon } from '@/components/ui/Icon';
 import { Badge } from '@/components/ui/primitives';
+
+const titleCase = (value: string) =>
+  value.toLowerCase().replace(/_/g, ' ').replace(/(^|\s)([a-z])/g, (_m, sp, ch) => sp + ch.toUpperCase());
 import { renderMarkdown } from '@/lib/ui/markdown';
 import type { Doc } from '@/lib/ui/static-content';
 
 export type DocStats =
   | { kind: 'rulebook'; states: number; rules: number; species: number; checks: number; restricted: number }
-  | { kind: 'documents'; rows: { doc_type: string; purpose: string; issuing_authority: string; retention_months: number; verification_method: string }[] }
+  | {
+      kind: 'documents';
+      rows: { doc_type: string; stage: string; mandatory: number; description: string; scope_species: string; scope_jurisdiction: string }[];
+    }
   | null;
 
 /**
@@ -78,20 +84,25 @@ export function DesktopDoc({ doc, stats }: { doc: Doc; stats?: DocStats }) {
                   <thead className="bg-[var(--surface-2)] text-[11.5px] uppercase tracking-[.08em] text-[var(--muted)]">
                     <tr>
                       <th className="px-4 py-2.5 font-medium">Document</th>
-                      <th className="px-4 py-2.5 font-medium">What it proves</th>
-                      <th className="px-4 py-2.5 font-medium">Issued by</th>
-                      <th className="px-4 py-2.5 font-medium">Verified how</th>
-                      <th className="px-4 py-2.5 font-medium">Retention</th>
+                      <th className="px-4 py-2.5 font-medium">Required at</th>
+                      <th className="px-4 py-2.5 font-medium">Scope</th>
+                      <th className="px-4 py-2.5 font-medium">What it has to show</th>
+                      <th className="px-4 py-2.5 font-medium">Obligatory</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--line)] bg-[var(--surface)]">
                     {stats.rows.map((r) => (
-                      <tr key={r.doc_type}>
-                        <td className="px-4 py-3 font-medium">{r.doc_type.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase())}</td>
-                        <td className="px-4 py-3 text-[var(--muted)]">{r.purpose}</td>
-                        <td className="px-4 py-3">{r.issuing_authority}</td>
-                        <td className="px-4 py-3 text-[var(--muted)]">{r.verification_method}</td>
-                        <td className="mono px-4 py-3 text-[12px]">{Math.round(r.retention_months / 12) >= 1 ? `${Math.round(r.retention_months / 12)} yr` : `${r.retention_months} mo`}</td>
+                      <tr key={`${r.doc_type}-${r.scope_species}-${r.scope_jurisdiction}`}>
+                        <td className="px-4 py-3 font-medium">{titleCase(r.doc_type)}</td>
+                        <td className="px-4 py-3">{titleCase(r.stage)}</td>
+                        <td className="px-4 py-3 text-[var(--muted)]">
+                          {r.scope_species}
+                          {r.scope_jurisdiction !== 'Any jurisdiction' ? ` · ${r.scope_jurisdiction}` : ''}
+                        </td>
+                        <td className="max-w-[380px] px-4 py-3 text-[var(--muted)]">{r.description}</td>
+                        <td className="px-4 py-3">
+                          <Badge tone={r.mandatory ? 'ink' : 'quiet'}>{r.mandatory ? 'always' : 'if applicable'}</Badge>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

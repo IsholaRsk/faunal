@@ -54,13 +54,12 @@ export function MobileDoc({ doc, stats }: { doc: Doc; stats?: DocStats }) {
             {stats.rows.map((r) => (
               <div key={r.doc_type} className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3.5">
                 <p className="text-[14px] font-medium">{titleCase(r.doc_type)}</p>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--muted)]">{r.purpose}</p>
+                <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--muted)]">{r.description}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Badge icon="shield">{r.issuing_authority}</Badge>
-                  <Badge>{titleCase(r.verification_method)}</Badge>
-                  <Badge icon="clock">
-                    {r.retention_months >= 12 ? `${Math.round(r.retention_months / 12)} yr keep` : `${r.retention_months} mo keep`}
-                  </Badge>
+                  <Badge icon="clock">{titleCase(r.stage)}</Badge>
+                  <Badge>{r.scope_species}</Badge>
+                  {r.scope_jurisdiction !== 'Any jurisdiction' ? <Badge icon="location">{r.scope_jurisdiction}</Badge> : null}
+                  {r.mandatory ? <Badge tone="ink">always required</Badge> : null}
                 </div>
               </div>
             ))}

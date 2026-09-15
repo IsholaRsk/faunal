@@ -17,11 +17,28 @@ export function rulebookStats(): DocStats {
 
 export function documentStats(): DocStats {
   const db = getDb();
+  // Columns come straight from required_documents — the same table the engine
+  // reads when it decides which paperwork a listing is missing.
   const rows = db
     .prepare(
-      `SELECT doc_type, purpose, issuing_authority, retention_months, verification_method
-       FROM required_documents ORDER BY doc_type`,
+      `SELECT r.doc_type,
+              r.stage,
+              r.mandatory,
+              r.description,
+              CASE WHEN r.species_id IS NULL THEN 'All species' ELSE s.common_name END AS scope_species,
+              CASE WHEN r.jurisdiction_id IS NULL THEN 'Any jurisdiction' ELSE j.code END AS scope_jurisdiction
+       FROM required_documents r
+       LEFT JOIN species s ON s.id = r.species_id
+       LEFT JOIN jurisdictions j ON j.id = r.jurisdiction_id
+       ORDER BY r.doc_type, scope_species`,
     )
-    .all() as DocStats extends { rows: infer R } ? R : never;
+    .all() as {
+      doc_type: string;
+      stage: string;
+      mandatory: number;
+      description: string;
+      scope_species: string;
+      scope_jurisdiction: string;
+    }[];
   return { kind: 'documents', rows };
 }
