@@ -1,0 +1,32 @@
+-- Production target: the SQLite model in lib/db/schema.sql maps one-to-one onto
+-- Postgres (Supabase). This file records the mapping decisions rather than a
+-- second copy of the DDL, so the two never drift:
+--
+--   TEXT ids            → text primary keys (prefixed ids keep working; no change)
+--   INTEGER cents       → bigint, CHECK (x >= 0)
+--   JSON columns        → jsonb with GIN indexes (compliance_snapshot, signals, legs)
+--   ISO8601 TEXT stamps → timestamptz
+--   better-sqlite3 WAL  → managed Postgres, replicas for reads
+--   lib/repo RBAC       → row-level security policies below
+--
+-- Alter types (illustrative, applied by the same migration order):
+--   ALTER TABLE animals ALTER description TYPE text;
+--   CREATE INDEX animals_state_species_idx ON animals (state, species_id) WHERE status = 'APPROVED';
+--   CREATE VIEW v_animal_cards AS SELECT ... ;           -- identical projection
+--
+-- Row-level security (the RLS analogue of the repo-level checks):
+--   ALTER TABLE animal_documents ENABLE ROW LEVEL SECURITY;
+--   CREATE POLICY document_owner_read ON animal_documents FOR SELECT
+--     USING (owner_user_id = auth.uid() OR breeder_id = auth.breeder_id());
+--   CREATE POLICY document_order_participant_read ON animal_documents FOR SELECT
+--     USING (EXISTS (SELECT 1 FROM orders o JOIN order_items oi ON oi.order_id = o.id
+--                     WHERE oi.animal_id = animal_documents.animal_id
+--                       AND (o.buyer_id = auth.uid() OR o.seller_user_id = auth.uid())));
+--   CREATE POLICY document_staff_read ON animal_documents FOR SELECT
+--     USING (auth.role() IN ('ADMIN','MODERATOR'));
+--   ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+--   CREATE POLICY session_self ON sessions FOR ALL USING (user_id = auth.uid());
+--
+-- Object storage: Supabase Storage bucket `faunal-private` with signed URLs
+-- issued from GET documents/:id after the same access check, replacing the
+-- local /data/private path in lib/domain/media.ts.

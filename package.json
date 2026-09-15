@@ -1,0 +1,34 @@
+{
+  "name": "faunal-marketplace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FAUNAL — premium US marketplace for legally permitted exotic animals. One backend, two experiences (mobile app + desktop marketplace).",
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3000",
+    "typecheck": "tsc --noEmit",
+    "db:reset": "tsx scripts/db-reset.ts",
+    "db:seed": "tsx scripts/db-seed.ts",
+    "db:images": "tsx scripts/build-images.ts",
+    "test": "tsx tests/run.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "11.10.0",
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "20.19.30",
+    "@types/react": "18.3.23",
+    "@types/react-dom": "18.3.7",
+    "autoprefixer": "10.4.21",
+    "postcss": "8.5.6",
+    "sharp": "0.33.5",
+    "tailwindcss": "3.4.17",
+    "tsx": "4.20.3",
+    "typescript": "5.6.3"
+  }
+}

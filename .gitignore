@@ -1,0 +1,22 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.local
+.vercel
+.DS_Store
+npm-debug.log*
+
+# Local runtime state. The seeded SQLite file is committed on purpose so a
+# fresh clone (or a serverless deploy) boots with a populated marketplace;
+# sidecars and scratch data are not.
+data/*.db-wal
+data/*.db-shm
+data/private/**
+!data/private/.gitkeep
+# Generated derivatives are committed so a fresh clone (and the serverless
+# bundle) serves real imagery without a build step. Regenerate with
+# `npm run db:images`.
